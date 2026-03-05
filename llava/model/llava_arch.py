@@ -22,8 +22,18 @@ from .multimodal_encoder.builder import build_vision_tower
 from .multimodal_projector.builder import build_vision_projector
 
 from llava.constants import IGNORE_INDEX, IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_PATCH_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
-
 from llava.mm_utils import get_anyres_image_grid_shape
+
+
+# Global flag to control whether to prune (remove) the first image token
+# Can be set to "BASELINE" (keep all tokens) or "PRUNE" (remove first token)
+
+
+# Global variable to store which token index to prune (for single token pruning)
+
+#所有剪枝逻辑转移到文件modeling_llama.py中
+# PRUNE_MODE = "BASELINE"
+# PRUNE_TOKEN_INDEX = None
 
 
 class LlavaMetaModel:
@@ -229,6 +239,7 @@ class LlavaMetaForCausalLM(ABC):
         new_input_embeds = []
         new_labels = []
         cur_image_idx = 0
+        
         for batch_idx, cur_input_ids in enumerate(input_ids):
             num_images = (cur_input_ids == IMAGE_TOKEN_INDEX).sum()
             if num_images == 0:
@@ -252,15 +263,39 @@ class LlavaMetaForCausalLM(ABC):
             cur_input_embeds_no_im = torch.split(cur_input_embeds, split_sizes, dim=0)
             cur_new_input_embeds = []
             cur_new_labels = []
+            
+            # 跟踪当前batch中image token的起始位置
+            #cur_image_start_pos = 0
 
             for i in range(num_images + 1):
-                cur_new_input_embeds.append(cur_input_embeds_no_im[i])
+                cur_new_input_embeds.append(cur_input_embeds_no_im[i]) ###cur_input_embeds_no_im[i]是text_tokens
                 cur_new_labels.append(cur_labels_noim[i])
                 if i < num_images:
-                    cur_image_features = image_features[cur_image_idx]
+                    cur_image_features = image_features[cur_image_idx]  ###cur_image_features是image_tokens
                     cur_image_idx += 1
+                    
+                    # 记录image features在序列中的起始位置（用于attention_mask剪枝）
+                    #image_start_pos = cur_image_start_pos + cur_input_embeds_no_im[i].shape[0]
+                    
+                    # # ===== MODIFIED: Conditionally remove image tokens based on PRUNE_MODE =====
+                    # # Only prune during prefill phase (when input_ids has more than 1 token, i.e., not a decode step)
+                    # # Decode step typically has input_ids.shape[1] == 1 (single token generation)
+                    # is_prefill = _input_ids.shape[1] > 1
+                    # if PRUNE_MODE == "PRUNE" and PRUNE_TOKEN_INDEX is not None and is_prefill:
+                    #     # Remove only the specific token index
+                    #     if PRUNE_TOKEN_INDEX < cur_image_features.shape[0]:
+                    #         cur_image_features = torch.cat([
+                    #             cur_image_features[:PRUNE_TOKEN_INDEX],
+                    #             cur_image_features[PRUNE_TOKEN_INDEX + 1:]
+                    #         ], dim=0)
+                    #         print(f"[LlavaArch] Prefill pruning token at image start pos {image_start_pos}, token idx {PRUNE_TOKEN_INDEX}")
+                    # # ============================================================================
+                    
                     cur_new_input_embeds.append(cur_image_features)
                     cur_new_labels.append(torch.full((cur_image_features.shape[0],), IGNORE_INDEX, device=cur_labels.device, dtype=cur_labels.dtype))
+                    
+                    # 更新image token的起始位置（为下一个image做准备）
+                    #cur_image_start_pos += cur_input_embeds_no_im[i].shape[0] + cur_image_features.shape[0]
 
             cur_new_input_embeds = [x.to(self.device) for x in cur_new_input_embeds]
 

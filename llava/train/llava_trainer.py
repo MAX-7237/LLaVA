@@ -9,10 +9,12 @@ from transformers.trainer import (
     is_sagemaker_mp_enabled,
     get_parameter_names,
     has_length,
-    ALL_LAYERNORM_LAYERS,
     logger,
 )
 from typing import List, Optional
+
+# Define ALL_LAYERNORM_LAYERS for compatibility with newer transformers versions
+ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
 
 
 def maybe_zero_3(param, ignore_status=False, name=None):
