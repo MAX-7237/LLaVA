@@ -19,8 +19,11 @@ import torch
 import torch.nn as nn
 
 from transformers import AutoConfig, AutoModelForCausalLM, LlamaConfig
-                         
-from .modeling_llama import LlamaModel,LlamaForCausalLM
+
+#--------------------------------------------------------------------------
+#在这里修改引用       
+from .modeling_llama_attention_weights import LlamaModel,LlamaForCausalLM
+#--------------------------------------------------------------------------
 
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.generation.utils import GenerateOutput
